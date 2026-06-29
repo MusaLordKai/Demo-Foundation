@@ -1,0 +1,175 @@
+// Prisma schema — The Demo Foundation (grant-driven case processing)
+// Phase 1: grants, documents, per-grant workflow steps, case numbers, new
+// categories. The Status enum + current review flow stay for now; the dynamic
+// step engine + CaseStatus + split LogEntry arrive in Phase 2.
+
+generator client {
+  provider      = "prisma-client-js"
+  // "native" for local dev; the debian target lets the same client run in the Docker image.
+  binaryTargets = ["native", "debian-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  APPLICANT
+  REVIEWER
+}
+
+// Dynamic, step-driven lifecycle. Position within the workflow is tracked by
+// Application.currentStep, not by extra statuses.
+enum CaseStatus {
+  DRAFT
+  IN_REVIEW
+  APPROVED
+  REJECTED
+}
+
+enum LogCategory {
+  SYSTEM
+  CASE
+}
+
+enum Category {
+  SPORT
+  TECHNOLOGY
+  GENERAL_EDUCATION
+  QUALITY_OF_LIFE
+}
+
+enum GrantStatus {
+  OPEN
+  CLOSED
+}
+
+model User {
+  id           String        @id @default(uuid())
+  email        String        @unique
+  name         String
+  role         Role
+  passwordHash String
+  createdAt    DateTime      @default(now())
+
+  applications  Application[] @relation("OwnedApplications")
+  reviewing     Application[] @relation("ReviewingApplications")
+  logs          LogEntry[]    @relation("LogActor")
+  grantsCreated Grant[]       @relation("GrantCreator")
+}
+
+model Grant {
+  id             String      @id @default(uuid())
+  name           String
+  shortCode      String      @unique // exactly 3 uppercase letters (validated in app layer)
+  category       Category
+  description    String      @default("")
+  fundsAllocated Decimal     @db.Decimal(14, 2)
+  openUntil      DateTime    @db.Date // applications accepted up to and including this date
+  status         GrantStatus @default(OPEN)
+
+  createdById String
+  createdBy   User   @relation("GrantCreator", fields: [createdById], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  documents    GrantDocument[]
+  steps        WorkflowStep[]
+  applications Application[]
+
+  @@index([status])
+}
+
+model GrantDocument {
+  id         String   @id @default(uuid())
+  grantId    String
+  grant      Grant    @relation(fields: [grantId], references: [id], onDelete: Cascade)
+  filename   String
+  mime       String
+  size       Int
+  storedName String // UUID filename on disk
+  createdAt  DateTime @default(now())
+
+  @@index([grantId])
+}
+
+model WorkflowStep {
+  id        String   @id @default(uuid())
+  grantId   String
+  grant     Grant    @relation(fields: [grantId], references: [id], onDelete: Cascade)
+  name      String
+  position  Int
+  createdAt DateTime @default(now())
+
+  currentFor Application[] @relation("CurrentStep")
+
+  @@index([grantId])
+}
+
+model Application {
+  id          String   @id @default(uuid())
+  caseNumber  String   @unique // SHORTCODE-MM-YY-NNN
+  title       String
+  category    Category // snapshot of the grant's category at creation
+  description String   @default("")
+  amount      Decimal    @db.Decimal(12, 2)
+  needBy      DateTime   @db.Date
+  status      CaseStatus @default(DRAFT)
+
+  grantId String
+  grant   Grant  @relation(fields: [grantId], references: [id])
+
+  ownerId String
+  owner   User   @relation("OwnedApplications", fields: [ownerId], references: [id])
+
+  reviewerId String?
+  reviewer   User?   @relation("ReviewingApplications", fields: [reviewerId], references: [id])
+
+  // Active workflow step (used by the dynamic engine in Phase 2).
+  currentStepId String?
+  currentStep   WorkflowStep? @relation("CurrentStep", fields: [currentStepId], references: [id], onDelete: SetNull)
+
+  // Single file attachment (metadata; bytes live on disk under UPLOAD_DIR).
+  attachmentFilename String?
+  attachmentMime     String?
+  attachmentSize     Int?
+  attachmentStored   String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  logs LogEntry[]
+
+  @@index([status])
+  @@index([ownerId])
+  @@index([grantId])
+}
+
+// Unified log: SYSTEM (login, grant/workflow changes) and CASE (case processing).
+model LogEntry {
+  id       String      @id @default(uuid())
+  category LogCategory
+  action   String // login, CREATE, submit, advance, return, reject, grant.created …
+
+  actorId String?
+  actor   User?   @relation("LogActor", fields: [actorId], references: [id], onDelete: SetNull)
+
+  // CASE logs reference an application; caseNumber is denormalised for filtering.
+  applicationId String?
+  application   Application? @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  caseNumber    String?
+
+  fromStep   String?
+  toStep     String?
+  fromStatus CaseStatus?
+  toStatus   CaseStatus?
+  comment    String?
+  message    String?
+  createdAt  DateTime    @default(now())
+
+  @@index([category])
+  @@index([applicationId])
+  @@index([caseNumber])
+}
