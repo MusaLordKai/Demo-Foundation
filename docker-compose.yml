@@ -1,0 +1,44 @@
+# Brings up PostgreSQL + the backend API. The backend applies migrations and
+# seeds demo data on first boot. Run the frontend separately (see README).
+#
+#   docker compose up --build
+#
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: caseproc
+      POSTGRES_PASSWORD: caseproc
+      POSTGRES_DB: caseproc
+    ports:
+      - "5432:5432"
+    volumes:
+      - dbdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U caseproc"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build: ./backend
+    environment:
+      DATABASE_URL: postgresql://caseproc:caseproc@db:5432/caseproc?schema=public
+      JWT_SECRET: change-me-in-prod
+      PORT: "4000"
+      UPLOAD_DIR: /app/uploads
+      CORS_ORIGIN: http://localhost:5173
+      MAX_UPLOAD_BYTES: "5242880"
+      ALLOWED_MIME: application/pdf,image/png,image/jpeg
+      SEED_ON_START: "true"
+    ports:
+      - "4000:4000"
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - uploads:/app/uploads
+
+volumes:
+  dbdata:
+  uploads:
