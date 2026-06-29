@@ -22,6 +22,13 @@ services:
 
   backend:
     build: ./backend
+    # SMTP creds (and any other secrets) come from backend/.env — the single
+    # source of truth, the same file the pm2/production deploy reads via dotenv.
+    # Optional, so a fresh clone without it still boots (email just stays off).
+    # The environment: block below wins on any overlapping keys (e.g. DATABASE_URL).
+    env_file:
+      - path: ./backend/.env
+        required: false
     environment:
       DATABASE_URL: postgresql://caseproc:caseproc@db:5432/caseproc?schema=public
       JWT_SECRET: change-me-in-prod
