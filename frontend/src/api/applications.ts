@@ -1,8 +1,30 @@
 import { apiGet, apiPost, apiPut, apiUpload, getToken } from "./client";
-import type { Application, ApplicationInput, ApplicationUpdate, ReviewerAction, Status } from "./types";
+import type {
+  Application,
+  ApplicationInput,
+  ApplicationUpdate,
+  Paginated,
+  ReviewerAction,
+  Status,
+} from "./types";
 
 export const listApplications = (status?: Status) =>
   apiGet<Application[]>(`/applications${status ? `?status=${status}` : ""}`);
+
+/** Paginated + free-text search for the reviewer queue (power-up). */
+export const searchApplications = (params: {
+  status?: Status;
+  q?: string;
+  page?: number;
+  pageSize?: number;
+}) => {
+  const sp = new URLSearchParams();
+  if (params.status) sp.set("status", params.status);
+  if (params.q) sp.set("q", params.q);
+  sp.set("page", String(params.page ?? 1));
+  sp.set("pageSize", String(params.pageSize ?? 10));
+  return apiGet<Paginated<Application>>(`/applications?${sp.toString()}`);
+};
 
 export const getApplication = (id: string) => apiGet<Application>(`/applications/${id}`);
 

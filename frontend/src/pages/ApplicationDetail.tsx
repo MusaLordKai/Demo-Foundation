@@ -57,7 +57,7 @@ export function ApplicationDetail() {
           <span className="eyebrow">Case {app.caseNumber}</span>
           <h1>{app.title}</h1>
         </div>
-        <StatusBadge status={app.status} />
+        <StatusBadge state={app.folder} />
       </div>
 
       {app.workflow && app.workflow.length > 0 && (
