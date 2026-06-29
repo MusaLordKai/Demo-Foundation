@@ -8,6 +8,7 @@ import { deleteAttachment, persistAttachment, sniffMime } from "../upload";
 import { config } from "../lib/config";
 import { generateCaseNumber } from "../lib/caseNumber";
 import { isGrantOpen } from "./grantService";
+import { notifyCaseEvent } from "./notificationService";
 
 // --- Compile-time drift guards: domain unions must equal the Prisma enums. ---
 type AssertEqual<A, B> = [A] extends [B] ? ([B] extends [A] ? true : never) : never;
@@ -40,14 +41,16 @@ function person(u: { id: string; name: string; email: string } | null) {
 }
 
 // Every case maps to exactly one applicant-facing folder, derived from its
-// status, workflow position, and the last action taken.
-export type Folder = "DRAFT" | "SUBMITTED" | "IN_REVIEW" | "REVERTED" | "APPROVED" | "REJECTED";
+// status, workflow position, and the last action taken. These mirror the
+// assignment's state machine: SUBMITTED = just submitted (step 0), UNDER_REVIEW
+// = advanced past step 0; REVERTED = a DRAFT that a reviewer sent back.
+export type Folder = "DRAFT" | "SUBMITTED" | "UNDER_REVIEW" | "REVERTED" | "APPROVED" | "REJECTED";
 
 function deriveFolder(status: Status, pos: number | null, lastAction: string | null): Folder {
   if (status === "APPROVED") return "APPROVED";
   if (status === "REJECTED") return "REJECTED";
   if (status === "DRAFT") return lastAction === "return" ? "REVERTED" : "DRAFT";
-  return (pos ?? 0) === 0 ? "SUBMITTED" : "IN_REVIEW"; // IN_REVIEW @ step 0 = just submitted
+  return (pos ?? 0) === 0 ? "SUBMITTED" : "UNDER_REVIEW"; // IN_REVIEW @ step 0 = just submitted
 }
 
 function serializeBase(app: ListApp, lastAction: string | null) {
@@ -193,16 +196,69 @@ export interface ListFilter {
   status?: Status;
 }
 
-export async function listApplications(actor: AuthUser, filter: ListFilter) {
-  let where: Prisma.ApplicationWhereInput;
-  if (actor.role === "APPLICANT") {
-    where = { ownerId: actor.id, ...(filter.status ? { status: filter.status } : {}) };
-  } else {
-    // Reviewer queue: cases in review by default; or any explicit status.
-    where = filter.status ? { status: filter.status } : { status: "IN_REVIEW" };
+/** Build the visibility + filter predicate shared by list and search. */
+function buildListWhere(actor: AuthUser, status?: Status, q?: string): Prisma.ApplicationWhereInput {
+  const where: Prisma.ApplicationWhereInput =
+    actor.role === "APPLICANT"
+      ? { ownerId: actor.id, ...(status ? { status } : {}) }
+      : status
+        ? { status }
+        : { status: "IN_REVIEW" }; // reviewer queue defaults to cases in review
+  const text = q?.trim();
+  if (text) {
+    where.OR = [
+      { caseNumber: { contains: text, mode: "insensitive" } },
+      { title: { contains: text, mode: "insensitive" } },
+      { owner: { is: { name: { contains: text, mode: "insensitive" } } } },
+      { owner: { is: { email: { contains: text, mode: "insensitive" } } } },
+    ];
   }
+  return where;
+}
+
+export async function listApplications(actor: AuthUser, filter: ListFilter) {
+  const where = buildListWhere(actor, filter.status);
   const apps = await prisma.application.findMany({ where, include: listInclude, orderBy: { updatedAt: "desc" } });
   return apps.map((a) => serializeBase(a, a.logs[0]?.action ?? null));
+}
+
+export interface SearchParams {
+  status?: Status;
+  q?: string;
+  page: number;
+  pageSize: number;
+}
+
+export interface Paginated<T> {
+  items: T[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+}
+
+/** Paginated + free-text search over the listing (reviewer queue power-up). */
+export async function searchApplications(actor: AuthUser, params: SearchParams) {
+  const page = Math.max(1, Math.floor(params.page) || 1);
+  const pageSize = Math.min(50, Math.max(1, Math.floor(params.pageSize) || 10));
+  const where = buildListWhere(actor, params.status, params.q);
+  const [rows, total] = await prisma.$transaction([
+    prisma.application.findMany({
+      where,
+      include: listInclude,
+      orderBy: { updatedAt: "desc" },
+      skip: (page - 1) * pageSize,
+      take: pageSize,
+    }),
+    prisma.application.count({ where }),
+  ]);
+  return {
+    items: rows.map((a) => serializeBase(a, a.logs[0]?.action ?? null)),
+    total,
+    page,
+    pageSize,
+    totalPages: Math.max(1, Math.ceil(total / pageSize)),
+  };
 }
 
 export async function getApplication(appId: string, actor: AuthUser) {
@@ -261,6 +317,21 @@ export async function performCaseAction(appId: string, action: Action, actor: Au
     });
     return tx.application.findUniqueOrThrow({ where: { id: appId }, include: detailInclude });
   });
+
+  // Best-effort notification on status change — never blocks or fails the action.
+  notifyCaseEvent(
+    {
+      caseNumber: result.caseNumber,
+      title: result.title,
+      ownerEmail: result.owner?.email ?? null,
+      ownerName: result.owner?.name ?? null,
+    },
+    action,
+    result.status,
+    result.currentStep?.name ?? null,
+    comment && comment.trim() ? comment.trim() : null,
+  ).catch((err) => console.error("[notify] case event failed:", err));
+
   return serializeDetail(result);
 }
 
