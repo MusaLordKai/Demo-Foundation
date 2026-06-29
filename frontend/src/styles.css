@@ -314,6 +314,15 @@ h1 { font-size: 1.6rem; margin: 0 0 0.2rem; }
 .badge-under_review { background: var(--st-rev-bg); color: var(--st-rev-fg); }
 .badge-approved { background: var(--st-app-bg); color: var(--st-app-fg); }
 .badge-rejected { background: var(--st-rej-bg); color: var(--st-rej-fg); }
+.badge-reverted { background: var(--st-rev-bg); color: var(--st-rev-fg); }
+
+/* Reviewer queue power-up: search + pagination controls. */
+.queue-controls { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.queue-controls .search {
+  padding: 8px 12px; border: 1px solid var(--line); border-radius: 8px;
+  background: var(--surface); color: var(--ink); min-width: 240px; font: inherit;
+}
+.pagination { display: flex; align-items: center; justify-content: flex-end; gap: 14px; margin-top: 16px; }
 
 /* ---------- Detail page ---------- */
 .details {

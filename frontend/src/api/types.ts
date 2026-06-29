@@ -18,16 +18,25 @@ export const CATEGORY_LABELS: Record<Category, string> = {
 
 export type GrantStatus = "OPEN" | "CLOSED";
 
-export type Folder = "DRAFT" | "SUBMITTED" | "IN_REVIEW" | "REVERTED" | "APPROVED" | "REJECTED";
+export type Folder = "DRAFT" | "SUBMITTED" | "UNDER_REVIEW" | "REVERTED" | "APPROVED" | "REJECTED";
 
 export const FOLDERS: { key: Folder; label: string }[] = [
   { key: "DRAFT", label: "Draft" },
   { key: "SUBMITTED", label: "Submitted" },
-  { key: "IN_REVIEW", label: "In Review" },
+  { key: "UNDER_REVIEW", label: "Under review" },
   { key: "REVERTED", label: "Reverted" },
   { key: "APPROVED", label: "Approved" },
   { key: "REJECTED", label: "Rejected" },
 ];
+
+/** Paginated response envelope (reviewer queue search/pagination). */
+export interface Paginated<T> {
+  items: T[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+}
 
 export interface User {
   id: string;
