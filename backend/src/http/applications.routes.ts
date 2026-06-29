@@ -10,6 +10,7 @@ import {
   getAttachmentMeta,
   listApplications,
   performCaseAction,
+  searchApplications,
   setAttachment,
   updateApplication,
 } from "../services/applicationService";
@@ -31,6 +32,9 @@ applicationsRouter.post(
 );
 
 // List — applicants see their own; reviewers see the queue (or filter by status).
+// Pagination + search (reviewer queue power-up): when any of page/pageSize/q is
+// supplied, respond with a paginated envelope; otherwise a plain array, keeping
+// back-compat for the applicant list and existing clients.
 applicationsRouter.get(
   "/",
   asyncHandler(async (req, res) => {
@@ -42,7 +46,18 @@ applicationsRouter.get(
       }
       status = raw as Status;
     }
-    res.json(await listApplications(req.user!, { status }));
+
+    const q = typeof req.query.q === "string" ? req.query.q : undefined;
+    const wantsPage =
+      req.query.page !== undefined || req.query.pageSize !== undefined || q !== undefined;
+
+    if (wantsPage) {
+      const page = Number(req.query.page ?? 1);
+      const pageSize = Number(req.query.pageSize ?? 10);
+      res.json(await searchApplications(req.user!, { status, q, page, pageSize }));
+    } else {
+      res.json(await listApplications(req.user!, { status }));
+    }
   }),
 );
 

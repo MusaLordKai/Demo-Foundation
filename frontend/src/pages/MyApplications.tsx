@@ -56,7 +56,7 @@ export function MyApplications() {
                 <td>{CATEGORY_LABELS[a.category]}</td>
                 <td>{Number(a.amount).toLocaleString()}</td>
                 <td>
-                  <StatusBadge status={a.status} />
+                  <StatusBadge state={a.folder} />
                 </td>
               </tr>
             ))}
