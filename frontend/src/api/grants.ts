@@ -10,6 +10,12 @@ export const createGrant = (input: GrantInput & { steps?: string[] }) =>
 
 export const updateGrant = (id: string, input: GrantInput) => apiPut<Grant>(`/grants/${id}`, input);
 
+/** Close a grant to new applications (reviewer). */
+export const closeGrant = (id: string) => apiPost<Grant>(`/grants/${id}/close`);
+
+/** Reopen a previously closed grant (reviewer). */
+export const reopenGrant = (id: string) => apiPost<Grant>(`/grants/${id}/reopen`);
+
 export const setWorkflowSteps = (id: string, steps: string[]) =>
   apiPut<Grant>(`/grants/${id}/workflow`, { steps });
 

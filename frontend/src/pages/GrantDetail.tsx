@@ -1,19 +1,35 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useParams } from "react-router-dom";
-import { getGrant, downloadGrantDocument } from "../api/grants";
+import { getGrant, downloadGrantDocument, closeGrant, reopenGrant } from "../api/grants";
 import { useAuth } from "../auth/AuthContext";
 import { CATEGORY_LABELS } from "../api/types";
 
 export function GrantDetail() {
   const { id } = useParams();
   const { user } = useAuth();
+  const queryClient = useQueryClient();
   const isReviewer = user?.role === "REVIEWER";
   const { data: grant, isLoading, error } = useQuery({ queryKey: ["grant", id], queryFn: () => getGrant(id!) });
+
+  const statusMutation = useMutation({
+    mutationFn: () => (grant!.status === "OPEN" ? closeGrant(grant!.id) : reopenGrant(grant!.id)),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["grant", id] });
+      queryClient.invalidateQueries({ queryKey: ["grants"] });
+    },
+  });
 
   if (isLoading) return <p>Loading…</p>;
   if (error || !grant) return <p className="error">Could not load this grant.</p>;
 
   const open = grant.status === "OPEN";
+
+  function toggleStatus() {
+    const msg = open
+      ? "Close this grant? Applicants will no longer be able to apply."
+      : "Reopen this grant for applications?";
+    if (window.confirm(msg)) statusMutation.mutate();
+  }
 
   return (
     <div className="card">
@@ -23,9 +39,14 @@ export function GrantDetail() {
           <h1>{grant.name}</h1>
         </div>
         {isReviewer ? (
-          <Link className="btn" to={`/grants/${grant.id}/edit`}>
-            Edit grant
-          </Link>
+          <div className="actions">
+            <Link className="btn" to={`/grants/${grant.id}/edit`}>
+              Edit grant
+            </Link>
+            <button className={open ? "warn" : "ok"} onClick={toggleStatus} disabled={statusMutation.isPending}>
+              {open ? "Close grant" : "Reopen grant"}
+            </button>
+          </div>
         ) : (
           open && (
             <Link className="btn" to={`/grants/${grant.id}/apply`}>

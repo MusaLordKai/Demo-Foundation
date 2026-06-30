@@ -9,6 +9,7 @@ import {
   getDocumentMeta,
   getGrant,
   listGrants,
+  setGrantStatus,
   setWorkflowSteps,
   updateGrant,
 } from "../services/grantService";
@@ -49,6 +50,23 @@ grantsRouter.put(
   requireRole("REVIEWER"),
   asyncHandler(async (req, res) => {
     res.json(await updateGrant(req.params.id, parse(grantInputSchema, req.body)));
+  }),
+);
+
+// Close / reopen a grant — reviewers only. Closing stops new applications.
+grantsRouter.post(
+  "/:id/close",
+  requireRole("REVIEWER"),
+  asyncHandler(async (req, res) => {
+    res.json(await setGrantStatus(req.user!, req.params.id, "CLOSED"));
+  }),
+);
+
+grantsRouter.post(
+  "/:id/reopen",
+  requireRole("REVIEWER"),
+  asyncHandler(async (req, res) => {
+    res.json(await setGrantStatus(req.user!, req.params.id, "OPEN"));
   }),
 );
 

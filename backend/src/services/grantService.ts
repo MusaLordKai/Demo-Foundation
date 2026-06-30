@@ -6,6 +6,7 @@ import { DEFAULT_WORKFLOW_STEPS } from "../lib/validation";
 import { notFound, unprocessable } from "../http/errors";
 import { config } from "../lib/config";
 import { persistAttachment, sniffMime } from "../upload";
+import { logSystem } from "./logService";
 
 const grantInclude = {
   documents: { orderBy: { createdAt: "asc" } },
@@ -115,6 +116,27 @@ export async function updateGrant(id: string, input: GrantInput) {
     }
     throw err;
   }
+}
+
+/**
+ * Open or close a grant. Closing stops new applications (isGrantOpen → false) and
+ * hides it from applicants; existing cases are unaffected. Idempotent, and writes
+ * a SYSTEM log only on an actual change. Reviewer-only (enforced at the route).
+ */
+export async function setGrantStatus(actor: AuthUser, id: string, status: "OPEN" | "CLOSED") {
+  const grant = await prisma.grant.findUnique({
+    where: { id },
+    select: { id: true, status: true, name: true, shortCode: true },
+  });
+  if (!grant) throw notFound("Grant not found.");
+  if (grant.status !== status) {
+    await prisma.grant.update({ where: { id }, data: { status } });
+    await logSystem(status === "CLOSED" ? "grant.closed" : "grant.reopened", {
+      actorId: actor.id,
+      message: `${status === "CLOSED" ? "Closed" : "Reopened"} grant ${grant.name} (${grant.shortCode})`,
+    });
+  }
+  return getGrant(id);
 }
 
 /** Replace the grant's ordered workflow steps (covers add / remove / reorder). */
