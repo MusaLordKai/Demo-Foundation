@@ -11,10 +11,12 @@ let transporter: Transporter | null = null;
 function getTransporter(): Transporter | null {
   if (!config.mail.enabled) return null;
   if (!transporter) {
+    const implicit = config.mail.port === 465;
     transporter = nodemailer.createTransport({
       host: config.mail.host,
       port: config.mail.port,
-      secure: config.mail.port === 465, // 465 = implicit TLS; 587 = STARTTLS
+      secure: implicit,       // 465 = implicit TLS; 587 = STARTTLS upgrade
+      requireTLS: !implicit,  // force STARTTLS on port 587 — Gmail rejects plain auth
       auth: { user: config.mail.user, pass: config.mail.pass },
     });
   }
