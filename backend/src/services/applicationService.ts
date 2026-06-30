@@ -267,6 +267,28 @@ export async function getApplication(appId: string, actor: AuthUser) {
 }
 
 /**
+ * Delete a case. Allowed ONLY for the owner and ONLY on a brand-new draft that
+ * has never been submitted — once a case has entered review it carries an audit
+ * trail that must be preserved, so it can no longer be deleted (the workflow
+ * resolves it instead). Reviewers cannot delete a case (enforced at the route).
+ */
+export async function deleteApplication(appId: string, actor: AuthUser) {
+  const app = await loadVisibleDetail(appId, actor); // 404 hides other people's cases
+  if (app.ownerId !== actor.id) throw forbidden("Only the owner may delete this application.");
+  if (app.status !== "DRAFT") throw conflict("Only a draft can be deleted.");
+  const everSubmitted = await prisma.logEntry.count({
+    where: { applicationId: appId, action: "submit" },
+  });
+  if (everSubmitted > 0) {
+    throw conflict("This draft has already been submitted once and can no longer be deleted.");
+  }
+
+  const storedName = app.attachmentStored;
+  await prisma.application.delete({ where: { id: appId } }); // CASE logs cascade away
+  await deleteAttachment(storedName); // best-effort attachment cleanup
+}
+
+/**
  * Execute a case action through the pure step engine, then apply the status +
  * step change and write a CASE log atomically. Concurrency is guarded by a
  * conditional updateMany on the expected (status, currentStep).

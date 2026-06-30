@@ -1,7 +1,13 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link, useParams } from "react-router-dom";
-import { caseAction, downloadAttachment, getApplication, submitApplication } from "../api/applications";
+import { Link, useNavigate, useParams } from "react-router-dom";
+import {
+  caseAction,
+  deleteApplication,
+  downloadAttachment,
+  getApplication,
+  submitApplication,
+} from "../api/applications";
 import { useAuth } from "../auth/AuthContext";
 import { StatusBadge } from "../components/StatusBadge";
 import { AuditTrail } from "../components/AuditTrail";
@@ -11,6 +17,7 @@ import { CATEGORY_LABELS, type Application, type ReviewerAction } from "../api/t
 
 export function ApplicationDetail() {
   const { id } = useParams();
+  const navigate = useNavigate();
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [comment, setComment] = useState("");
@@ -32,6 +39,15 @@ export function ApplicationDetail() {
     onError: (err) => setActionError(err instanceof ApiError ? err.message : "Action failed."),
   });
 
+  const deleteMutation = useMutation({
+    mutationFn: () => deleteApplication(app!.id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["applications"] });
+      navigate("/applications");
+    },
+    onError: (err) => setActionError(err instanceof ApiError ? err.message : "Could not delete this draft."),
+  });
+
   if (isLoading) return <p>Loading…</p>;
   if (error || !app) return <p className="error">Could not load this case.</p>;
 
@@ -41,6 +57,8 @@ export function ApplicationDetail() {
   const canReview = isReviewer && !isOwner && app.status === "IN_REVIEW";
   const atLastStep =
     app.workflow && app.currentStepIndex !== null && app.currentStepIndex === (app.workflow.length ?? 0) - 1;
+  // Deletable only while a brand-new draft (never submitted → folder "DRAFT", not "REVERTED").
+  const canDelete = isOwner && app.status === "DRAFT" && app.folder === "DRAFT";
 
   function runReviewer(action: ReviewerAction) {
     if ((action === "reject" || action === "return") && comment.trim() === "") {
@@ -48,6 +66,12 @@ export function ApplicationDetail() {
       return;
     }
     mutation.mutate(() => caseAction(app!.id, action, comment.trim() || undefined));
+  }
+
+  function onDelete() {
+    if (window.confirm("Delete this draft permanently? This cannot be undone.")) {
+      deleteMutation.mutate();
+    }
   }
 
   return (
@@ -114,6 +138,11 @@ export function ApplicationDetail() {
           <button onClick={() => mutation.mutate(() => submitApplication(app.id))} disabled={mutation.isPending}>
             Submit for review
           </button>
+          {canDelete && (
+            <button className="danger" onClick={onDelete} disabled={deleteMutation.isPending}>
+              Delete draft
+            </button>
+          )}
         </div>
       )}
 

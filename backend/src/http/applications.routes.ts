@@ -6,6 +6,7 @@ import { actionSchema, applicationInputSchema, applicationUpdateSchema, parse } 
 import { STATUSES, type Action, type Status } from "../domain/transitions";
 import {
   createApplication,
+  deleteApplication,
   getApplication,
   getAttachmentMeta,
   listApplications,
@@ -74,6 +75,17 @@ applicationsRouter.put(
   asyncHandler(async (req, res) => {
     const input = parse(applicationUpdateSchema, req.body);
     res.json(await updateApplication(req.params.id, req.user!, input));
+  }),
+);
+
+// Delete a case — applicants only, and only a brand-new (never-submitted) draft.
+// Reviewers are blocked here by role; the service enforces owner + draft + unsubmitted.
+applicationsRouter.delete(
+  "/:id",
+  requireRole("APPLICANT"),
+  asyncHandler(async (req, res) => {
+    await deleteApplication(req.params.id, req.user!);
+    res.status(204).end();
   }),
 );
 

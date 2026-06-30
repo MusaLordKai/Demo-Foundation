@@ -1,4 +1,4 @@
-import { apiGet, apiPost, apiPut, apiUpload, getToken } from "./client";
+import { apiDelete, apiGet, apiPost, apiPut, apiUpload, getToken } from "./client";
 import type {
   Application,
   ApplicationInput,
@@ -33,6 +33,9 @@ export const createApplication = (input: ApplicationInput) =>
 
 export const updateApplication = (id: string, input: ApplicationUpdate) =>
   apiPut<Application>(`/applications/${id}`, input);
+
+/** Delete a brand-new draft (owner only, never-submitted). */
+export const deleteApplication = (id: string) => apiDelete(`/applications/${id}`);
 
 export const submitApplication = (id: string) => apiPost<Application>(`/applications/${id}/submit`);
 
