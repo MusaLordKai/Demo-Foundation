@@ -391,6 +391,36 @@ h1 { font-size: 1.6rem; margin: 0 0 0.2rem; }
 .workflow-steps { margin: 0; padding-left: 1.2rem; }
 .workflow-steps li { margin: 0.35rem 0; }
 
+/* ---- Multi-step form indicator ---- */
+.form-steps {
+  display: flex;
+  align-items: center;
+  margin-bottom: 1.75rem;
+  padding-bottom: 1.25rem;
+  border-bottom: 1px solid var(--line);
+}
+.form-step {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--muted);
+  font-size: 0.86rem;
+  font-weight: 500;
+}
+.form-step-active { color: var(--gold-2); font-weight: 600; }
+.form-step-num {
+  width: 26px; height: 26px; border-radius: 999px;
+  background: var(--line-2); color: var(--muted);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 0.78rem; font-weight: 700; flex: none;
+}
+.form-step-active .form-step-num { background: var(--gold); color: #fff; }
+.form-step-connector { flex: 1; height: 1px; background: var(--line); margin: 0 0.85rem; min-width: 24px; }
+
+/* ---- Inline row actions (e.g. draft table) ---- */
+.row-actions { display: flex; gap: 0.35rem; align-items: center; }
+.row-action-btn { font-size: 0.8rem !important; padding: 0.28rem 0.6rem !important; }
+
 .steps-editor { margin-top: 0.3rem; }
 .steps-list { list-style: none; padding: 0; margin: 0 0 0.7rem; display: flex; flex-direction: column; gap: 0.5rem; }
 .step-row { display: flex; align-items: center; gap: 0.5rem; }
